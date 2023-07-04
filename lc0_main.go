@@ -1,6 +1,4 @@
 // A new client to work with the lc0 binary.
-//
-//
 package main
 
 import (
@@ -48,13 +46,13 @@ var (
 	parallelism32   bool
 	testedDxNet     string
 
-	lc0Exe           = "lc0"
+	lc0Exe           = "px0"
 	defaultLocalHost = "Unknown"
 	gpuType          = "Unknown"
 
 	localHost     = flag.String("localhost", "", "Localhost name to send to the server when reporting\n(defaults to Unknown, overridden by the configuration file)")
-	hostname      = flag.String("hostname", "http://api.lczero.org", "Address of the server")
-	networkMirror = flag.String("network-mirror", "", "Alternative url prefix to download networks from.")
+	hostname      = flag.String("hostname", "http://px0.org", "Address of the server")
+	networkMirror = flag.String("network-mirror", "http://px0.org/cached/network/sha/", "Alternative url prefix to download networks from.")
 	user          = flag.String("user", "", "Username")
 	password      = flag.String("password", "", "Password")
 	gpu           = flag.Int("gpu", -1, "GPU to use (ignored if --backend-opts used)")
@@ -85,7 +83,7 @@ type Settings struct {
 const inf = "inf"
 
 /*
-	Reads the user and password from a config file and returns empty strings if anything went wrong.
+Reads the user and password from a config file and returns empty strings if anything went wrong.
 */
 func readSettings(path string) (string, string, string) {
 	settings := Settings{}
@@ -105,7 +103,7 @@ func readSettings(path string) (string, string, string) {
 }
 
 /*
-	Prompts the user for a username and password and creates the config file.
+Prompts the user for a username and password and creates the config file.
 */
 func createSettings(path string) (string, string) {
 	settings := Settings{}
@@ -239,51 +237,14 @@ func (c *cmdWrapper) openInput() {
 }
 
 func convertMovesToPGN(moves []string, result string, start_ply_count int) string {
-	game := chess.NewGame(chess.UseNotation(chess.LongAlgebraicNotation{}))
-	if len(moves) > 6 && moves[len(moves)-7] == "from_fen" {
-		fen := strings.Join(moves[len(moves)-6:], " ")
-		moves = moves[:len(moves)-7]
-		pair := &chess.TagPair{
-			Key:   "FEN",
-			Value: fen,
-		}
-		tagPairs := []*chess.TagPair{pair}
-		fen_func, _ := chess.FEN(fen)
-		game = chess.NewGame(chess.UseNotation(chess.LongAlgebraicNotation{}), fen_func, chess.TagPairs(tagPairs))
-	}
-	for _, m := range moves {
-		err := game.MoveStr(m)
-		if err != nil {
-			log.Fatalf("movstr: %v", err)
-		}
-	}
-	if game.Outcome() == chess.NoOutcome && len(game.EligibleDraws()) > 1 {
-		game.Draw(game.EligibleDraws()[1])
-	}
-	game2 := chess.NewGame()
-	b, err := game.MarshalText()
-	if err != nil {
-		log.Fatalf("MarshalText failed: %v", err)
-	}
-	b_str := string(b)
-	if strings.HasSuffix(b_str, " *") && result != "" {
-		to_append := "1/2-1/2"
-		if result == "whitewon" {
-			to_append = "1-0"
-		} else if result == "blackwon" {
-			to_append = "0-1"
-		}
-		b = []byte(strings.TrimRight(b_str, "*") + to_append)
-	}
-	game2.UnmarshalText(b)
-	return game2.String() + " {OL: " + strconv.Itoa(start_ply_count) + "}"
+	return ""
 }
 
 func createCmdWrapper() *cmdWrapper {
 	c := &cmdWrapper{
 		gi:       make(chan gameInfo),
 		BestMove: make(chan string),
-		Version:  "v0.10.0",
+		Version:  "v0.25.0",
 		Retry:    make(chan bool),
 	}
 	return c
@@ -592,24 +553,26 @@ func playMatch(httpClient *http.Client, ngr client.NextGameResponse, baselinePat
 				}
 				for true {
 					if curng != nil {
-						if curng.Flip && len(flipped) > 0 {
-							l := len(flipped)
-							nextgi := flipped[l-1]
-							flipped = flipped[:l-1]
-							log.Println("uploading match result")
-							extraParams := getExtraParams()
-							extraParams["engineVersion"] = c.Version
-							client.UploadMatchResult(httpClient, *hostname, curng.MatchGameId, -resultToNum(nextgi.result), nextgi.pgn, extraParams)
-							log.Println("uploaded")
-							curng = nil
-						} else if !curng.Flip && len(normal) > 0 {
-							l := len(normal)
-							nextgi := normal[l-1]
-							normal = normal[:l-1]
-							log.Println("uploading match result")
-							extraParams := getExtraParams()
-							extraParams["engineVersion"] = c.Version
-							client.UploadMatchResult(httpClient, *hostname, curng.MatchGameId, resultToNum(nextgi.result), nextgi.pgn, extraParams)
+						if (len(flipped) > 0) && len(normal) > 0 {
+							if curng.Flip1 {
+								nextgi1 := flipped[0]
+								flipped = flipped[1:len(flipped)]
+								nextgi2 := normal[0]
+								normal = normal[1:len(normal)]
+								log.Println("uploading match result")
+								extraParams := getExtraParams()
+								extraParams["engineVersion"] = c.Version
+								client.UploadMatchResult(httpClient, *hostname, curng.MatchGameId1, -resultToNum(nextgi1.result), nextgi1.pgn, curng.MatchGameId2, resultToNum(nextgi2.result), nextgi2.pgn, extraParams)
+							} else {
+								nextgi1 := normal[0]
+								normal = normal[1:len(normal)]
+								nextgi2 := flipped[0]
+								flipped = flipped[1:len(flipped)]
+								log.Println("uploading match result")
+								extraParams := getExtraParams()
+								extraParams["engineVersion"] = c.Version
+								client.UploadMatchResult(httpClient, *hostname, curng.MatchGameId1, resultToNum(nextgi1.result), nextgi1.pgn, curng.MatchGameId2, -resultToNum(nextgi2.result), nextgi2.pgn, extraParams)
+							}
 							log.Println("uploaded")
 							curng = nil
 						}
@@ -1144,7 +1107,7 @@ func main() {
 	}
 
 	if runtime.GOOS == "windows" {
-		lc0Exe = "lc0.exe"
+		lc0Exe = "px0.exe"
 	}
 	dir, _ := os.Getwd()
 	fi, err := os.Stat(path.Join(dir, lc0Exe))
