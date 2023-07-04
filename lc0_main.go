@@ -51,8 +51,8 @@ var (
 	gpuType          = "Unknown"
 
 	localHost     = flag.String("localhost", "", "Localhost name to send to the server when reporting\n(defaults to Unknown, overridden by the configuration file)")
-	hostname      = flag.String("hostname", "http://px0.org", "Address of the server")
-	networkMirror = flag.String("network-mirror", "http://px0.org/cached/network/sha/", "Alternative url prefix to download networks from.")
+	hostname      = flag.String("hostname", "http://192.168.0.169:8080", "Address of the server")
+	networkMirror = flag.String("network-mirror", "http://192.168.0.169:8080/cached/network/sha/", "Alternative url prefix to download networks from.")
 	user          = flag.String("user", "", "Username")
 	password      = flag.String("password", "", "Password")
 	gpu           = flag.Int("gpu", -1, "GPU to use (ignored if --backend-opts used)")
@@ -510,7 +510,7 @@ func playMatch(httpClient *http.Client, ngr client.NextGameResponse, baselinePat
 		}
 	}
 	if !hasVisitsParam {
-		params = append(params, "--visits=800")
+		params = append(params, "--visits=1000")
 	}
 	c := createCmdWrapper()
 	c.launch(candidatePath, baselinePath, params /* input= */, false)
